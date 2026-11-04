@@ -181,7 +181,24 @@ final class AppModel: ObservableObject {
     // MARK: - History
 
     func refreshHistory() async {
-        recentConversations = await conversations.list(limit: 30)
+        recentConversations = await conversations.list(limit: 50)
+    }
+
+    func renameConversation(_ id: UUID, to title: String) {
+        let title = Conversation.cleanTitle(title)
+        guard !title.isEmpty else { return }
+        if let index = recentConversations.firstIndex(where: { $0.id == id }) {
+            recentConversations[index].title = title
+        }
+        if session.conversation.id == id { session.renameCurrent(title) }
+        Task { await conversations.rename(id, to: title) }
+    }
+
+    /// Deletes a saved chat. Deleting the open chat starts a new one.
+    func deleteConversation(_ id: UUID) {
+        recentConversations.removeAll { $0.id == id }
+        if session.conversation.id == id { session.discardCurrent() }
+        conversations.delete(id)
     }
 
     func clearHistory() {

@@ -163,4 +163,12 @@ public extension Conversation {
         guard !trimmed.isEmpty else { return "New chat" }
         return trimmed.count > 48 ? String(trimmed.prefix(47)) + "…" : trimmed
     }
+
+    /// A title the user typed: one line, trimmed, at most 80 characters.
+    /// Empty when nothing is left.
+    public static func cleanTitle(_ text: String) -> String {
+        let line = text.split(whereSeparator: \.isNewline).map(String.init).joined(separator: " ")
+        let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.count > 80 ? String(trimmed.prefix(80)) : trimmed
+    }
 }

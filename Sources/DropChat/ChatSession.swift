@@ -21,6 +21,8 @@ final class ChatSession: ObservableObject {
     @Published var isAttaching = false
     /// Bumped to move the keyboard focus into the prompt field.
     @Published private(set) var focusToken = 0
+    /// Bumped to scroll the transcript to the latest message.
+    @Published private(set) var scrollToBottomToken = 0
 
     /// Per-chat model choice; `nil` follows the settings' active provider.
     @Published var providerID: String?
@@ -42,6 +44,10 @@ final class ChatSession: ObservableObject {
 
     func requestFocus() {
         focusToken &+= 1
+    }
+
+    func requestScrollToBottom() {
+        scrollToBottomToken &+= 1
     }
 
     // MARK: - Visibility
@@ -171,13 +177,15 @@ final class ChatSession: ObservableObject {
                     approvalMemory: approvalMemory
                 )
                 for try await event in loop.run(transcript: self.conversation.messages) {
+                    // The user moved to another chat: this run is over.
+                    guard self.conversation.id == conversationID else { break }
                     self.handle(event)
                 }
             } catch is CancellationError {
             } catch {
-                self.errorMessage = error.localizedDescription
+                if self.conversation.id == conversationID { self.errorMessage = error.localizedDescription }
             }
-            self.finishRun(cancelled: Task.isCancelled)
+            self.finishRun(cancelled: Task.isCancelled, conversationID: conversationID)
         }
     }
 
@@ -190,19 +198,26 @@ final class ChatSession: ObservableObject {
         queue.forEach { $0.1.resume(returning: .deny) }
     }
 
-    private func finishRun(cancelled: Bool) {
-        if cancelled, !draftText.isEmpty {
-            conversation.messages.append(ChatMessage(role: .assistant, parts: [.text(draftText)], model: activeModel, notice: "Stopped."))
+    private func finishRun(cancelled: Bool, conversationID: UUID) {
+        // A run stopped by switching chats must not write into the new one;
+        // the old chat was saved when the switch happened.
+        let sameChat = conversation.id == conversationID
+        if sameChat {
+            if cancelled, !draftText.isEmpty {
+                conversation.messages.append(ChatMessage(role: .assistant, parts: [.text(draftText)], model: activeModel, notice: "Stopped."))
+            }
+            conversation.messages = TranscriptRepair.closeDanglingToolCalls(conversation.messages)
         }
-        conversation.messages = TranscriptRepair.closeDanglingToolCalls(conversation.messages)
         draftText = ""
         draftReasoning = ""
         liveToolCalls = []
         runningToolIDs = []
         isRunning = false
         runTask = nil
-        conversation.updatedAt = Date()
-        persist()
+        if sameChat {
+            conversation.updatedAt = Date()
+            persist()
+        }
         app?.onBusyChanged?(isBusy)
     }
 
@@ -320,6 +335,20 @@ final class ChatSession: ObservableObject {
     func newChat() {
         stop()
         persist()
+        resetToNewChat()
+    }
+
+    /// Leaves the open chat without saving it (it was just deleted).
+    func discardCurrent() {
+        stop()
+        resetToNewChat()
+    }
+
+    func renameCurrent(_ title: String) {
+        conversation.title = title
+    }
+
+    private func resetToNewChat() {
         conversation = Conversation()
         attachments = []
         errorMessage = nil

@@ -28,6 +28,7 @@ public final class DropChatDroplet: NSObject, ObservableObject, Droplet {
     private var floatingPanel: FloatingPanelController?
     private var cancellables: Set<AnyCancellable> = []
     private var registeredShortcut = false
+    private let holdTracker = ShortcutHoldTracker()
 
     public override init() { super.init() }
 
@@ -58,6 +59,7 @@ public final class DropChatDroplet: NSObject, ObservableObject, Droplet {
     }
 
     public func deactivate() {
+        holdTracker.cancel()
         cancellables.removeAll()
         floatingPanel?.tearDown()
         floatingPanel = nil
@@ -102,21 +104,43 @@ public final class DropChatDroplet: NSObject, ObservableObject, Droplet {
         floatingPanel = nil
     }
 
-    /// The shortcut's action.
+    /// The shortcut's action. A tap shows or hides the chat; holding it
+    /// shows the chat only until the keys are released (a peek), unless the
+    /// window gets pinned meanwhile.
     func toggleChat() {
         guard let host, let app else { return }
+        // A repeat while the chord is still down is not a second press.
+        guard !holdTracker.isTracking else { return }
+        let shortcut = host.shortcuts.currentShortcut(id: Self.floatingShortcutID)
+        var onHoldReleased: (@MainActor () -> Void)?
+
         if app.settings.general.floatingWindowEnabled {
-            toggleFloatingWindow()
-            return
-        }
-        if host.shelf.isExpanded && host.shelf.soloWidgetID == Self.widgetID {
+            guard let controller = panelController() else { return }
+            if controller.isVisible {
+                controller.hide()
+            } else {
+                controller.show()
+                onHoldReleased = { [weak controller] in
+                    guard let controller, !controller.state.isPinned else { return }
+                    controller.hide()
+                }
+            }
+        } else if host.shelf.isExpanded && host.shelf.soloWidgetID == Self.widgetID {
             host.shelf.close()
         } else {
             // Opening the widget alone makes the shelf key for it
             // (`.keyboardFocusable`); the composer then takes the focus.
             _ = host.shelf.open(revealing: Self.widgetID)
             app.session.requestFocus()
+            onHoldReleased = { [weak self] in
+                guard let host = self?.host, host.shelf.isExpanded, host.shelf.soloWidgetID == Self.widgetID else { return }
+                host.shelf.close()
+            }
         }
+
+        guard let shortcut else { return }
+        let peek = app.settings.general.peekOnHold ? onHoldReleased : nil
+        holdTracker.track(shortcut) { peek?() }
     }
 
     private func panelController() -> FloatingPanelController? {
@@ -268,7 +292,8 @@ extension DropChatDroplet: SettingsPaneProviding {
             SettingsSearchEntry(title: "MCP servers", keywords: ["mcp", "tools"]),
             SettingsSearchEntry(title: "Web search", keywords: ["exa", "perplexity", "search", "crawl"]),
             SettingsSearchEntry(title: "Skills", keywords: ["agent skills", "skill.md"]),
-            SettingsSearchEntry(title: "Floating window", keywords: ["window", "full screen", "overlay"]),
+            SettingsSearchEntry(title: "Floating window", keywords: ["window", "full screen", "overlay", "pin", "sidebar", "scroll"]),
+            SettingsSearchEntry(title: "Hold to peek", keywords: ["shortcut", "hold", "peek"]),
         ]
     }
 }

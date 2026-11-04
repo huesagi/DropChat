@@ -395,6 +395,8 @@ final class GeneralSettingsTests: XCTestCase {
         XCTAssertEqual(settings.general.maxToolRounds, 7)
         XCTAssertFalse(settings.general.autoNewChatEnabled)
         XCTAssertEqual(settings.general.autoNewChatUnit, .minutes)
+        XCTAssertTrue(settings.general.scrollToBottomOnOpen)
+        XCTAssertTrue(settings.general.peekOnHold)
     }
 
     func testAutoNewChatInterval() {
@@ -407,5 +409,51 @@ final class GeneralSettingsTests: XCTestCase {
         let settings = GeneralSettings(autoNewChatEnabled: true, autoNewChatAfter: 45, autoNewChatUnit: .seconds)
         let decoded = try JSONDecoder().decode(GeneralSettings.self, from: JSONEncoder().encode(settings))
         XCTAssertEqual(decoded, settings)
+    }
+}
+
+final class ConversationStoreTests: XCTestCase {
+    private var directory: URL!
+
+    override func setUp() {
+        directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+    }
+
+    override func tearDown() {
+        try? FileManager.default.removeItem(at: directory)
+    }
+
+    func testRenameKeepsOrderAndDeleteRemoves() async throws {
+        let store = ConversationStore(directory: directory)
+        let older = Conversation(title: "Older", messages: [ChatMessage(role: .user, parts: [.text("a")])])
+        store.save(older)
+        _ = await store.list()
+        let newer = Conversation(title: "Newer", messages: [ChatMessage(role: .user, parts: [.text("b")])])
+        // Distinct modification dates, so the order is defined.
+        try await Task.sleep(for: .milliseconds(1100))
+        store.save(newer)
+        _ = await store.list()
+
+        let renamed = await store.rename(older.id, to: "  Renamed\nchat  ")
+        XCTAssertTrue(renamed)
+        var summaries = await store.list()
+        XCTAssertEqual(summaries.map(\.title), ["Newer", "Renamed chat"])
+        let loaded = await store.load(older.id)
+        XCTAssertEqual(loaded?.messages, older.messages)
+
+        let blank = await store.rename(older.id, to: "   ")
+        XCTAssertFalse(blank)
+        let missing = await store.rename(UUID(), to: "x")
+        XCTAssertFalse(missing)
+
+        store.delete(newer.id)
+        summaries = await store.list()
+        XCTAssertEqual(summaries.map(\.id), [older.id])
+    }
+
+    func testCleanTitle() {
+        XCTAssertEqual(Conversation.cleanTitle("  a\nb "), "a b")
+        XCTAssertEqual(Conversation.cleanTitle(" \n "), "")
+        XCTAssertEqual(Conversation.cleanTitle(String(repeating: "x", count: 100)).count, 80)
     }
 }
