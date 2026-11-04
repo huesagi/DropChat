@@ -107,8 +107,27 @@ public struct SkillSettings: Codable, Hashable, Sendable {
     }
 }
 
+public enum TimeUnit: String, Codable, CaseIterable, Sendable {
+    case seconds
+    case minutes
+
+    public var label: String {
+        switch self {
+        case .seconds: return "Seconds"
+        case .minutes: return "Minutes"
+        }
+    }
+
+    public var seconds: TimeInterval {
+        switch self {
+        case .seconds: return 1
+        case .minutes: return 60
+        }
+    }
+}
+
 public struct GeneralSettings: Codable, Hashable, Sendable {
-    /// The floating window and its shortcut. Off until the user turns it on.
+    /// The floating window. Off until the user turns it on.
     public var floatingWindowEnabled: Bool
     /// Shows the "add Finder selection" button. Needs Automation permission.
     public var finderSelectionEnabled: Bool
@@ -117,6 +136,11 @@ public struct GeneralSettings: Codable, Hashable, Sendable {
     public var systemPrompt: String
     public var saveHistory: Bool
     public var maxToolRounds: Int
+    /// Start a fresh chat when the chat is reopened after being closed for
+    /// `autoNewChatInterval`.
+    public var autoNewChatEnabled: Bool
+    public var autoNewChatAfter: Int
+    public var autoNewChatUnit: TimeUnit
 
     public init(
         floatingWindowEnabled: Bool = false,
@@ -124,7 +148,10 @@ public struct GeneralSettings: Codable, Hashable, Sendable {
         autoAttachFinderSelection: Bool = false,
         systemPrompt: String = "",
         saveHistory: Bool = true,
-        maxToolRounds: Int = 25
+        maxToolRounds: Int = 25,
+        autoNewChatEnabled: Bool = false,
+        autoNewChatAfter: Int = 5,
+        autoNewChatUnit: TimeUnit = .minutes
     ) {
         self.floatingWindowEnabled = floatingWindowEnabled
         self.finderSelectionEnabled = finderSelectionEnabled
@@ -132,6 +159,28 @@ public struct GeneralSettings: Codable, Hashable, Sendable {
         self.systemPrompt = systemPrompt
         self.saveHistory = saveHistory
         self.maxToolRounds = maxToolRounds
+        self.autoNewChatEnabled = autoNewChatEnabled
+        self.autoNewChatAfter = autoNewChatAfter
+        self.autoNewChatUnit = autoNewChatUnit
+    }
+
+    /// Fields added in later versions must not reset the ones already saved.
+    public init(from decoder: Decoder) throws {
+        let defaults = GeneralSettings()
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        floatingWindowEnabled = (try? container.decodeIfPresent(Bool.self, forKey: .floatingWindowEnabled)) ?? defaults.floatingWindowEnabled
+        finderSelectionEnabled = (try? container.decodeIfPresent(Bool.self, forKey: .finderSelectionEnabled)) ?? defaults.finderSelectionEnabled
+        autoAttachFinderSelection = (try? container.decodeIfPresent(Bool.self, forKey: .autoAttachFinderSelection)) ?? defaults.autoAttachFinderSelection
+        systemPrompt = (try? container.decodeIfPresent(String.self, forKey: .systemPrompt)) ?? defaults.systemPrompt
+        saveHistory = (try? container.decodeIfPresent(Bool.self, forKey: .saveHistory)) ?? defaults.saveHistory
+        maxToolRounds = (try? container.decodeIfPresent(Int.self, forKey: .maxToolRounds)) ?? defaults.maxToolRounds
+        autoNewChatEnabled = (try? container.decodeIfPresent(Bool.self, forKey: .autoNewChatEnabled)) ?? defaults.autoNewChatEnabled
+        autoNewChatAfter = (try? container.decodeIfPresent(Int.self, forKey: .autoNewChatAfter)) ?? defaults.autoNewChatAfter
+        autoNewChatUnit = (try? container.decodeIfPresent(TimeUnit.self, forKey: .autoNewChatUnit)) ?? defaults.autoNewChatUnit
+    }
+
+    public var autoNewChatInterval: TimeInterval {
+        TimeInterval(max(1, autoNewChatAfter)) * autoNewChatUnit.seconds
     }
 }
 

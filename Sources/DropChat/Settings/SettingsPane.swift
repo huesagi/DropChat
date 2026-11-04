@@ -355,18 +355,43 @@ struct WindowAndFilesSection: View {
 
     var body: some View {
         DropletSettingsSection {
-            settingsSectionHeader("Window and files")
+            settingsSectionHeader("Window and chat")
         } content: {
             DropletSettingsCard {
                 DropletToggleRow(
                     title: "Floating window",
-                    subtitle: "A chat window that floats above other apps, full-screen ones included. Show or hide it with a shortcut you set on Droppy's Shortcuts page (Option-Shift-Space by default).",
+                    subtitle: "A chat window that floats above other apps, full-screen ones included. When it is on, the shortcut shows or hides this window instead of opening the chat in the notch.",
                     isOn: app.binding(\.general.floatingWindowEnabled)
                 )
-                if app.settings.general.floatingWindowEnabled {
-                    DropletControlRow(title: "Shortcut") {
-                        Button("Open Shortcuts") { _ = app.host.workspace.openShortcuts() }
-                            .buttonStyle(DroppyQuietButtonStyle(size: .small))
+                DropletControlRow(title: "Shortcut", infoTip: "Shows or hides DropChat from any app: the floating window when it is on, the chat in the notch otherwise. Option-Shift-Space unless you change it.") {
+                    Button("Open Shortcuts") { _ = app.host.workspace.openShortcuts() }
+                        .buttonStyle(DroppyQuietButtonStyle(size: .small))
+                }
+                DropletToggleRow(
+                    title: "Start a new chat after closing",
+                    subtitle: "When you reopen DropChat after it has been closed for a while, it starts a fresh chat. Earlier chats stay in your history.",
+                    isOn: app.binding(\.general.autoNewChatEnabled)
+                )
+                if app.settings.general.autoNewChatEnabled {
+                    DropletControlRow(title: "Closed for at least") {
+                        HStack(spacing: DroppySpacing.sm) {
+                            CommitTextField(
+                                placeholder: "5",
+                                value: Binding(
+                                    get: { String(app.settings.general.autoNewChatAfter) },
+                                    set: { text in
+                                        guard let value = Int(text.trimmingCharacters(in: .whitespaces)) else { return }
+                                        app.update { $0.general.autoNewChatAfter = min(max(value, 1), 999) }
+                                    }
+                                )
+                            )
+                            .frame(width: 60)
+                            Picker("Unit", selection: app.binding(\.general.autoNewChatUnit)) {
+                                ForEach(TimeUnit.allCases, id: \.self) { Text($0.label).tag($0) }
+                            }
+                            .labelsHidden()
+                            .fixedSize()
+                        }
                     }
                 }
                 DropletToggleRow(

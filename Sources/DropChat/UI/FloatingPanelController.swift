@@ -5,11 +5,20 @@ import SwiftUI
 /// A panel that takes the keyboard without activating Droppy, so typing in
 /// it leaves the app underneath frontmost (the way Spotlight behaves).
 final class ChatPanel: NSPanel {
+    /// Called whenever the panel leaves the screen (hide, Escape, close).
+    var onOrderOut: (() -> Void)?
+
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
 
     override func cancelOperation(_ sender: Any?) {
         orderOut(nil)
+    }
+
+    override func orderOut(_ sender: Any?) {
+        let wasVisible = isVisible
+        super.orderOut(sender)
+        if wasVisible { onOrderOut?() }
     }
 }
 
@@ -39,6 +48,9 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
         self.panel = panel
         panel.orderFrontRegardless()
         panel.makeKey()
+        // The SwiftUI view stays mounted while the panel is ordered out, so
+        // its onAppear does not fire again: report the visibility here.
+        app.session.surfaceAppeared(.floatingPanel)
     }
 
     func hide() {
@@ -48,6 +60,7 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
     /// Releases the window (called from `deactivate()`).
     func tearDown() {
         panel?.orderOut(nil)
+        panel?.onOrderOut = nil
         panel?.contentView = nil
         panel?.delegate = nil
         panel = nil
@@ -78,6 +91,7 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
         panel.minSize = NSSize(width: 340, height: 320)
         panel.isReleasedWhenClosed = false
         panel.delegate = self
+        panel.onOrderOut = { [weak self] in self?.app.session.surfaceDisappeared(.floatingPanel) }
 
         let root = FloatingChatRoot(
             app: app,

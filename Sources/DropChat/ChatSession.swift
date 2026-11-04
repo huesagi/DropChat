@@ -19,6 +19,8 @@ final class ChatSession: ObservableObject {
     @Published var errorMessage: String?
     @Published private(set) var usage = TokenUsage()
     @Published var isAttaching = false
+    /// Bumped to move the keyboard focus into the prompt field.
+    @Published private(set) var focusToken = 0
 
     /// Per-chat model choice; `nil` follows the settings' active provider.
     @Published var providerID: String?
@@ -29,12 +31,46 @@ final class ChatSession: ObservableObject {
     private var runTask: Task<Void, Never>?
     private var approvalQueue: [(ApprovalRequest, CheckedContinuation<ApprovalDecision, Never>)] = []
     private let approvalMemory = ToolApprovalMemory()
+    private var visibleSurfaces: Set<ChatSurface> = []
+    private var hiddenSince: Date?
 
     init(app: AppModel) {
         self.app = app
     }
 
     var isBusy: Bool { isRunning || pendingApproval != nil }
+
+    func requestFocus() {
+        focusToken &+= 1
+    }
+
+    // MARK: - Visibility
+
+    /// A chat view came on screen (the shelf widget or the floating window).
+    func surfaceAppeared(_ surface: ChatSurface) {
+        let wasHidden = visibleSurfaces.isEmpty
+        visibleSurfaces.insert(surface)
+        if wasHidden {
+            startFreshIfStale()
+            hiddenSince = nil
+        }
+        requestFocus()
+    }
+
+    func surfaceDisappeared(_ surface: ChatSurface) {
+        guard visibleSurfaces.remove(surface) != nil, visibleSurfaces.isEmpty else { return }
+        hiddenSince = Date()
+    }
+
+    /// Starts a new chat when the user asked for one after the chat has been
+    /// closed long enough. Checked on reopen, so nothing runs while hidden,
+    /// and an answer in progress is never thrown away.
+    private func startFreshIfStale(now: Date = Date()) {
+        guard let general = app?.settings.general, general.autoNewChatEnabled,
+              let hiddenSince, now.timeIntervalSince(hiddenSince) >= general.autoNewChatInterval,
+              !conversation.messages.isEmpty, !isBusy, !isAttaching else { return }
+        newChat()
+    }
 
     /// Results by call id, for the tool chips.
     var resultsByCallID: [String: ToolResult] {
@@ -84,6 +120,7 @@ final class ChatSession: ObservableObject {
         if !text.isEmpty { parts.append(.text(text)) }
         input = ""
         attachments = []
+        requestFocus()
         if conversation.messages.isEmpty {
             conversation.title = Conversation.title(from: text.isEmpty ? (parts.first.flatMap(Self.attachmentName) ?? "Attachment") : text)
         }
@@ -288,6 +325,7 @@ final class ChatSession: ObservableObject {
         errorMessage = nil
         usage = TokenUsage()
         approvalMemory.reset()
+        requestFocus()
         if let general = app?.settings.general, general.autoAttachFinderSelection, general.finderSelectionEnabled {
             attachFinderSelection()
         }
@@ -304,6 +342,7 @@ final class ChatSession: ObservableObject {
             model = loaded.model
             approvalMemory.reset()
             usage = TokenUsage()
+            requestFocus()
         }
     }
 

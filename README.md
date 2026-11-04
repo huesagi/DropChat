@@ -9,7 +9,10 @@ DropChat puts a chat with a large language model on Droppy's shelf, with an opti
 - **Agent skills:** point DropChat at folders of skills (each a folder with a `SKILL.md`, e.g. `~/.claude/skills`). The model sees every skill's name and description, loads instructions on demand, reads bundled files and, if you allow it, runs bundled scripts.
 - **Web:** `web_search` through Exa or Perplexity (ranked results or a Sonar answer with sources) and `web_fetch` to read pages, through Exa's crawler or directly.
 - **Files:** attach with the paperclip, drop files on the chat, or pull in Finder's selection (optional, off by default). Images, PDFs (sent natively where the API reads PDFs, as extracted text otherwise), text and code files, and folder listings.
-- **Floating window:** off by default. When on, Option-Shift-Space (rebindable on Droppy's Shortcuts page) shows a chat window that joins every Space and floats over full-screen apps. It shares the conversation with the shelf.
+- **Shortcut:** Option-Shift-Space (rebindable on Droppy's Shortcuts page) shows or hides DropChat from any app: the chat in the notch, or the floating window when that is on.
+- **Floating window:** off by default. A chat window that joins every Space and floats over full-screen apps. It shares the conversation with the shelf.
+- **Keyboard:** Return sends, Shift-Return adds a line, ⌘N starts a new chat, ⌘. stops an answer. The prompt field takes focus whenever the chat opens.
+- **Fresh chats:** optionally start a new chat when DropChat is reopened after being closed for a time you choose, in seconds or minutes.
 - **History:** chats are saved on this Mac in DropChat's own folder; turn it off in settings.
 
 ## Privacy and safety

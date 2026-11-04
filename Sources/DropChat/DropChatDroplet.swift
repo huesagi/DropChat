@@ -52,6 +52,7 @@ public final class DropChatDroplet: NSObject, ObservableObject, Droplet {
             .sink { [weak self] enabled in self?.floatingWindowSettingChanged(enabled) }
             .store(in: &cancellables)
 
+        registerShortcut()
         app.start()
         host.log.info("DropChat activated")
     }
@@ -79,28 +80,42 @@ public final class DropChatDroplet: NSObject, ObservableObject, Droplet {
 
     // MARK: - Floating window
 
+    /// Option-Shift-Space shows or hides the chat: the floating window when
+    /// it is on, the shelf otherwise. The id is unchanged from 0.1.0 so a
+    /// binding the user set on Droppy's Shortcuts page survives.
+    private func registerShortcut() {
+        guard let host, !registeredShortcut else { return }
+        // The host drops the default if it collides with another binding.
+        let modifiers = NSEvent.ModifierFlags([.option, .shift]).rawValue
+        host.shortcuts.register(
+            id: Self.floatingShortcutID,
+            title: "Show or hide DropChat",
+            defaultShortcut: DropletKeyboardShortcut(keyCode: 49, modifiers: modifiers),
+            handler: { [weak self] in self?.toggleChat() }
+        )
+        registeredShortcut = true
+    }
+
     private func floatingWindowSettingChanged(_ enabled: Bool) {
-        guard let host else { return }
-        if enabled {
-            if !registeredShortcut {
-                // Option-Shift-Space; the host drops it if it collides, and
-                // the user can rebind it on Droppy's Shortcuts page.
-                let modifiers = NSEvent.ModifierFlags([.option, .shift]).rawValue
-                host.shortcuts.register(
-                    id: Self.floatingShortcutID,
-                    title: "Show or hide the DropChat window",
-                    defaultShortcut: DropletKeyboardShortcut(keyCode: 49, modifiers: modifiers),
-                    handler: { [weak self] in self?.toggleFloatingWindow() }
-                )
-                registeredShortcut = true
-            }
+        guard !enabled else { return }
+        floatingPanel?.tearDown()
+        floatingPanel = nil
+    }
+
+    /// The shortcut's action.
+    func toggleChat() {
+        guard let host, let app else { return }
+        if app.settings.general.floatingWindowEnabled {
+            toggleFloatingWindow()
+            return
+        }
+        if host.shelf.isExpanded && host.shelf.soloWidgetID == Self.widgetID {
+            host.shelf.close()
         } else {
-            floatingPanel?.tearDown()
-            floatingPanel = nil
-            if registeredShortcut {
-                host.shortcuts.unregister(id: Self.floatingShortcutID)
-                registeredShortcut = false
-            }
+            // Opening the widget alone makes the shelf key for it
+            // (`.keyboardFocusable`); the composer then takes the focus.
+            _ = host.shelf.open(revealing: Self.widgetID)
+            app.session.requestFocus()
         }
     }
 

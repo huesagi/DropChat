@@ -35,6 +35,8 @@ struct ChatView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .onAppear { session.surfaceAppeared(surface) }
+        .onDisappear { session.surfaceDisappeared(surface) }
         .onDrop(of: [.fileURL], isTargeted: $isDropTargeted) { providers in
             loadDroppedFiles(providers)
             return true
@@ -138,7 +140,8 @@ struct ChatHeader: View {
                 Image(systemName: "square.and.pencil")
             }
             .buttonStyle(DroppyCircleButtonStyle(size: 24))
-            .help("New chat")
+            .keyboardShortcut("n", modifiers: .command)
+            .help("New chat (⌘N)")
             if let onPopOut {
                 Button(action: onPopOut) {
                     Image(systemName: surface == .shelf ? "macwindow.on.rectangle" : "rectangle.inset.topright.filled")
@@ -228,7 +231,7 @@ struct ComposerView: View {
     @ObservedObject var app: AppModel
     @ObservedObject var session: ChatSession
     var onAppear: (() -> Void)?
-    @FocusState private var focused: Bool
+    @State private var inputHeight: CGFloat = 16
     @Environment(\.chatTheme) private var theme
 
     var body: some View {
@@ -257,13 +260,16 @@ struct ComposerView: View {
                     .buttonStyle(DroppyCircleButtonStyle(size: 24))
                     .help("Attach what is selected in Finder")
                 }
-                TextField("Message", text: $session.input, axis: .vertical)
-                    .textFieldStyle(.plain)
-                    .font(.system(size: 13))
-                    .foregroundStyle(theme.primary)
-                    .lineLimit(1...6)
-                    .focused($focused)
-                    .onSubmit { session.send() }
+                PromptTextView(
+                    text: $session.input,
+                    height: $inputHeight,
+                    placeholder: "Message",
+                    textColor: NSColor(theme.primary),
+                    placeholderColor: NSColor(theme.tertiary),
+                    focusToken: session.focusToken,
+                    onSubmit: { session.send() }
+                )
+                    .frame(height: inputHeight)
                     .padding(.horizontal, DroppySpacing.smd)
                     .padding(.vertical, DroppySpacing.xsm)
                     .background(theme.raisedFill, in: RoundedRectangle(cornerRadius: DroppyRadius.medium, style: .continuous))
@@ -284,10 +290,7 @@ struct ComposerView: View {
                 }
             }
         }
-        .onAppear {
-            focused = true
-            onAppear?()
-        }
+        .onAppear { onAppear?() }
     }
 }
 

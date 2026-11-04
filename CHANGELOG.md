@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- The shortcut opens the chat in the notch when the floating window is off.
+- ⌘N starts a new chat; Shift-Return inserts a line break.
+- The prompt field takes focus when a chat opens or starts.
+- Optional automatic new chat after DropChat has been closed for a set time.
+
 ## 0.1.0
 
 - Chat on Droppy's shelf with streaming answers, reasoning summaries and tool calls.

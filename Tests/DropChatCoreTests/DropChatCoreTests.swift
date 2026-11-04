@@ -382,3 +382,30 @@ final class ConcurrencyPrimitiveTests: XCTestCase {
         XCTAssertTrue(memory.contains("echo"))
     }
 }
+
+final class GeneralSettingsTests: XCTestCase {
+    /// A blob saved by 0.1.0 has none of the newer keys; the user's own values
+    /// must survive and the new ones take their defaults.
+    func testOldBlobKeepsValuesAndDefaultsNewFields() throws {
+        let old = #"{"general":{"floatingWindowEnabled":true,"finderSelectionEnabled":true,"autoAttachFinderSelection":false,"systemPrompt":"Be brief.","saveHistory":false,"maxToolRounds":7}}"#
+        let settings = try JSONDecoder().decode(DropChatSettings.self, from: Data(old.utf8))
+        XCTAssertTrue(settings.general.floatingWindowEnabled)
+        XCTAssertEqual(settings.general.systemPrompt, "Be brief.")
+        XCTAssertFalse(settings.general.saveHistory)
+        XCTAssertEqual(settings.general.maxToolRounds, 7)
+        XCTAssertFalse(settings.general.autoNewChatEnabled)
+        XCTAssertEqual(settings.general.autoNewChatUnit, .minutes)
+    }
+
+    func testAutoNewChatInterval() {
+        XCTAssertEqual(GeneralSettings(autoNewChatAfter: 30, autoNewChatUnit: .seconds).autoNewChatInterval, 30)
+        XCTAssertEqual(GeneralSettings(autoNewChatAfter: 5, autoNewChatUnit: .minutes).autoNewChatInterval, 300)
+        XCTAssertEqual(GeneralSettings(autoNewChatAfter: 0, autoNewChatUnit: .seconds).autoNewChatInterval, 1)
+    }
+
+    func testRoundTrip() throws {
+        let settings = GeneralSettings(autoNewChatEnabled: true, autoNewChatAfter: 45, autoNewChatUnit: .seconds)
+        let decoded = try JSONDecoder().decode(GeneralSettings.self, from: JSONEncoder().encode(settings))
+        XCTAssertEqual(decoded, settings)
+    }
+}
