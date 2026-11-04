@@ -1,0 +1,61 @@
+name: Build and validate
+
+on:
+  push:
+    branches: [main, 'claude/**']
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: macos-26
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select the newest Xcode
+        run: |
+          xcode="$(ls -d /Applications/Xcode*.app | sort -V | tail -1)"
+          sudo xcode-select -s "$xcode"
+          xcodebuild -version
+          swift --version
+
+      - name: Get the DroppyKit SDK
+        run: |
+          git clone --depth 1 https://gitlab.com/droppyformac1/droppykit.git "$RUNNER_TEMP/droppykit"
+          echo "$RUNNER_TEMP/droppykit/Scripts" >> "$GITHUB_PATH"
+
+      - name: Unit tests (DropChatCore) and a full package compile
+        run: swift test
+
+      - name: Build the droplet bundle
+        run: droppykit build
+
+      - name: Validate the bundle
+        run: droppykit validate --no-submission
+
+      - name: Render every surface
+        run: |
+          droppykit run -- --shots ./shots --report ./shots/report.json
+          python3 - <<'PY'
+          import json, sys
+          report = json.load(open("shots/report.json"))
+          problems = report.get("problems") or []
+          activation = (report.get("activation") or {}).get("error")
+          print(json.dumps(report, indent=2)[:4000])
+          if problems or activation:
+              print("Harness problems:", problems, "activation error:", activation)
+              sys.exit(1)
+          PY
+
+      - name: Upload shots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: shots
+          path: shots
+          if-no-files-found: ignore
