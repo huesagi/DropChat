@@ -126,8 +126,7 @@ public final class ChatEngine: @unchecked Sendable {
         model: String?,
         conversationID: UUID,
         approvals: any ApprovalHandler,
-        isPreapproved: @escaping @Sendable (String) async -> Bool,
-        rememberApproval: @escaping @Sendable (String) async -> Void
+        approvalMemory: ToolApprovalMemory
     ) async throws -> AgentLoop {
         let config = settings.providers.first { $0.id == providerID && $0.isEnabled } ?? settings.activeProvider
         guard let config, let provider = provider(for: config) else { throw ChatEngineError.noProvider }
@@ -151,8 +150,7 @@ public final class ChatEngine: @unchecked Sendable {
             approvals: approvals,
             options: AgentOptions(maxSteps: max(1, settings.general.maxToolRounds)),
             context: ToolContext(conversationID: conversationID),
-            isPreapproved: isPreapproved,
-            rememberApproval: rememberApproval
+            approvalMemory: approvalMemory
         )
     }
 }

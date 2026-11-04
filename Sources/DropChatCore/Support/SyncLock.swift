@@ -3,7 +3,7 @@ import Foundation
 /// A plain mutex usable from synchronous code inside async functions.
 /// (`NSLock.lock()` is marked unavailable from async contexts.)
 public final class SyncLock: @unchecked Sendable {
-    private let base = SyncLock()
+    private let base = NSLock()
 
     public init() {}
 

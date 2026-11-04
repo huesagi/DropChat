@@ -335,3 +335,50 @@ final class MiscTests: XCTestCase {
         XCTAssertEqual(JSONValue.number(3).serialized(), "3")
     }
 }
+
+final class ConcurrencyPrimitiveTests: XCTestCase {
+    /// A SyncLock that built itself recursively crashed Droppy on activation.
+    func testSyncLockConstructsAndGuards() {
+        let lock = SyncLock()
+        var counter = 0
+        DispatchQueue.concurrentPerform(iterations: 1_000) { _ in
+            lock.withLock { counter += 1 }
+        }
+        XCTAssertEqual(counter, 1_000)
+        lock.lock()
+        lock.unlock()
+    }
+
+    func testApprovalMemory() {
+        let memory = ToolApprovalMemory()
+        XCTAssertFalse(memory.contains("echo"))
+        memory.remember("echo")
+        XCTAssertTrue(memory.contains("echo"))
+        memory.reset()
+        XCTAssertFalse(memory.contains("echo"))
+    }
+
+    func testAllowForConversationIsRemembered() async throws {
+        final class CountingApprovals: ApprovalHandler, @unchecked Sendable {
+            let lock = SyncLock()
+            var asked = 0
+            func decide(_ request: ApprovalRequest) async -> ApprovalDecision {
+                lock.withLock { asked += 1 }
+                return .allowForConversation
+            }
+        }
+        let approvals = CountingApprovals()
+        let memory = ToolApprovalMemory()
+        let tool = FunctionTool(spec: ToolSpec(name: "echo", description: "", inputSchema: ["type": "object"]), sourceID: "test", approval: { _ in .ask(reason: "x") }) { _, _ in
+            ToolOutput(text: "ok")
+        }
+        let provider = AgentLoopTests.ScriptedProvider(turns: [
+            [.toolCall(ToolCall(id: "1", name: "echo", arguments: [:])), .finished(.toolUse)],
+            [.toolCall(ToolCall(id: "2", name: "echo", arguments: [:])), .finished(.toolUse)],
+        ])
+        let loop = AgentLoop(provider: provider, model: "m", system: nil, tools: [tool], approvals: approvals, context: ToolContext(conversationID: UUID()), approvalMemory: memory)
+        for try await _ in loop.run(transcript: [.user("go")]) {}
+        XCTAssertEqual(approvals.asked, 1)
+        XCTAssertTrue(memory.contains("echo"))
+    }
+}

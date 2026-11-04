@@ -40,8 +40,7 @@ public struct AgentLoop: Sendable {
     public let options: AgentOptions
     public let context: ToolContext
     /// Tools the user allowed for the whole conversation. Read before asking.
-    public let isPreapproved: @Sendable (String) async -> Bool
-    public let rememberApproval: @Sendable (String) async -> Void
+    public let approvalMemory: ToolApprovalMemory
 
     public init(
         provider: any LLMProvider,
@@ -51,8 +50,7 @@ public struct AgentLoop: Sendable {
         approvals: any ApprovalHandler,
         options: AgentOptions = AgentOptions(),
         context: ToolContext,
-        isPreapproved: @escaping @Sendable (String) async -> Bool = { _ in false },
-        rememberApproval: @escaping @Sendable (String) async -> Void = { _ in }
+        approvalMemory: ToolApprovalMemory = ToolApprovalMemory()
     ) {
         self.provider = provider
         self.model = model
@@ -61,8 +59,7 @@ public struct AgentLoop: Sendable {
         self.approvals = approvals
         self.options = options
         self.context = context
-        self.isPreapproved = isPreapproved
-        self.rememberApproval = rememberApproval
+        self.approvalMemory = approvalMemory
     }
 
     public func run(transcript initial: [ChatMessage]) -> AsyncThrowingStream<AgentEvent, Error> {
@@ -163,12 +160,12 @@ public struct AgentLoop: Sendable {
             case .none:
                 approved[call.id] = true
             case .ask(let reason):
-                if await isPreapproved(call.name) {
+                if approvalMemory.contains(call.name) {
                     approved[call.id] = true
                     continue
                 }
                 let decision = await approvals.decide(ApprovalRequest(call: call, toolDisplayName: tool.displayName, reason: reason, asksEveryTime: false))
-                if case .allowForConversation = decision { await rememberApproval(call.name) }
+                if case .allowForConversation = decision { approvalMemory.remember(call.name) }
                 approved[call.id] = decision != .deny
             case .always(let reason):
                 let decision = await approvals.decide(ApprovalRequest(call: call, toolDisplayName: tool.displayName, reason: reason, asksEveryTime: true))

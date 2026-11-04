@@ -89,6 +89,27 @@ public protocol ApprovalHandler: Sendable {
     func decide(_ request: ApprovalRequest) async -> ApprovalDecision
 }
 
+/// Tools the user allowed for the rest of a conversation ("Allow for this
+/// chat"). Owned by the chat; the agent loop reads and writes it.
+public final class ToolApprovalMemory: @unchecked Sendable {
+    private let lock = SyncLock()
+    private var allowed: Set<String> = []
+
+    public init() {}
+
+    public func contains(_ toolName: String) -> Bool {
+        lock.withLock { allowed.contains(toolName) }
+    }
+
+    public func remember(_ toolName: String) {
+        lock.withLock { _ = allowed.insert(toolName) }
+    }
+
+    public func reset() {
+        lock.withLock { allowed.removeAll() }
+    }
+}
+
 /// Grants everything. For tests and for tools that need no approval.
 public struct AutoApprove: ApprovalHandler {
     public init() {}

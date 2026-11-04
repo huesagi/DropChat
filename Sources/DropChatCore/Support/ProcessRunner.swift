@@ -102,7 +102,7 @@ public enum ProcessRunner {
         }
         defer { deadline.cancel() }
 
-        return try await withTaskCancellationHandler {
+        return await withTaskCancellationHandler {
             async let stdoutData = readAll(out.fileHandleForReading, limit: maxOutputBytes)
             async let stderrData = readAll(err.fileHandleForReading, limit: maxOutputBytes)
             let (stdoutBytes, stderrBytes) = await (stdoutData, stderrData)

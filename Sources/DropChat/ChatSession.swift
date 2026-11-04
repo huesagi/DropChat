@@ -24,10 +24,11 @@ final class ChatSession: ObservableObject {
     @Published var providerID: String?
     @Published var model: String?
 
-    private unowned let app: AppModel
+    /// Weak: views can outlive `deactivate()`, which releases the model.
+    private weak var app: AppModel?
     private var runTask: Task<Void, Never>?
     private var approvalQueue: [(ApprovalRequest, CheckedContinuation<ApprovalDecision, Never>)] = []
-    private var allowedTools: Set<String> = []
+    private let approvalMemory = ToolApprovalMemory()
 
     init(app: AppModel) {
         self.app = app
@@ -51,20 +52,20 @@ final class ChatSession: ObservableObject {
     // MARK: - Model choice
 
     var activeProvider: ProviderConfig? {
-        let settings = app.settings
+        guard let settings = app?.settings else { return nil }
         return settings.providers.first { $0.id == (providerID ?? settings.activeProviderID) && $0.isEnabled } ?? settings.activeProvider
     }
 
     var activeModel: String {
         if let model, !model.isEmpty { return model }
-        if providerID == nil, let model = app.settings.activeModel, !model.isEmpty { return model }
+        if providerID == nil, let model = app?.settings.activeModel, !model.isEmpty { return model }
         return activeProvider?.defaultModel ?? ""
     }
 
     func choose(provider: ProviderConfig, model: String) {
         providerID = provider.id
         self.model = model
-        app.update {
+        app?.update {
             $0.activeProviderID = provider.id
             $0.activeModel = model
         }
@@ -105,6 +106,7 @@ final class ChatSession: ObservableObject {
     }
 
     private func run() {
+        guard let app else { return }
         errorMessage = nil
         isRunning = true
         draftText = ""
@@ -117,18 +119,19 @@ final class ChatSession: ObservableObject {
         let model = activeModel
         let conversationID = conversation.id
         let bridge = ApprovalBridge(session: self)
+        let engine = app.engine
+        let approvalMemory = self.approvalMemory
 
         runTask = Task { [weak self] in
             guard let self else { return }
             do {
-                let loop = try await self.app.engine.makeLoop(
+                let loop = try await engine.makeLoop(
                     settings: settings,
                     providerID: providerID,
                     model: model,
                     conversationID: conversationID,
                     approvals: bridge,
-                    isPreapproved: { [weak self] name in await MainActor.run { self?.allowedTools.contains(name) ?? false } },
-                    rememberApproval: { [weak self] name in await MainActor.run { _ = self?.allowedTools.insert(name) } }
+                    approvalMemory: approvalMemory
                 )
                 for try await event in loop.run(transcript: self.conversation.messages) {
                     self.handle(event)
@@ -163,7 +166,7 @@ final class ChatSession: ObservableObject {
         runTask = nil
         conversation.updatedAt = Date()
         persist()
-        app.onBusyChanged?(isBusy)
+        app?.onBusyChanged?(isBusy)
     }
 
     private func handle(_ event: AgentEvent) {
@@ -205,8 +208,8 @@ final class ChatSession: ObservableObject {
         approvalQueue.append((request, continuation))
         if pendingApproval == nil {
             pendingApproval = request
-            app.onBusyChanged?(true)
-            app.onNeedsAttention?()
+            app?.onBusyChanged?(true)
+            app?.onNeedsAttention?()
         }
     }
 
@@ -264,13 +267,13 @@ final class ChatSession: ObservableObject {
         // The shelf floats above normal windows; keep the picker above it.
         panel.level = .popUpMenu
         isAttaching = true
-        app.onBusyChanged?(true)
+        app?.onBusyChanged?(true)
         panel.begin { [weak self] response in
             Task { @MainActor in
                 guard let self else { return }
                 self.isAttaching = false
                 if response == .OK { self.attach(panel.urls) }
-                self.app.onBusyChanged?(self.isBusy)
+                self.app?.onBusyChanged?(self.isBusy)
             }
         }
     }
@@ -284,8 +287,8 @@ final class ChatSession: ObservableObject {
         attachments = []
         errorMessage = nil
         usage = TokenUsage()
-        allowedTools = []
-        if app.settings.general.autoAttachFinderSelection, app.settings.general.finderSelectionEnabled {
+        approvalMemory.reset()
+        if let general = app?.settings.general, general.autoAttachFinderSelection, general.finderSelectionEnabled {
             attachFinderSelection()
         }
     }
@@ -295,17 +298,17 @@ final class ChatSession: ObservableObject {
         stop()
         persist()
         Task {
-            guard let loaded = await app.conversations.load(id) else { return }
+            guard let loaded = await app?.conversations.load(id) else { return }
             conversation = loaded
             providerID = loaded.providerID
             model = loaded.model
-            allowedTools = []
+            approvalMemory.reset()
             usage = TokenUsage()
         }
     }
 
     private func persist() {
-        guard app.settings.general.saveHistory, !conversation.messages.isEmpty else { return }
+        guard let app, app.settings.general.saveHistory, !conversation.messages.isEmpty else { return }
         conversation.providerID = activeProvider?.id
         conversation.model = activeModel
         app.conversations.save(conversation)
