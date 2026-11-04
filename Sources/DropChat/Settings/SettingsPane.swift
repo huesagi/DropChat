@@ -68,7 +68,8 @@ struct CommitTextField: View {
     @FocusState private var focused: Bool
 
     var body: some View {
-        TextField(placeholder, text: $draft)
+        TextField("", text: $draft, prompt: Text(placeholder))
+            .labelsHidden()
             .textFieldStyle(.roundedBorder)
             .font(monospaced ? .system(size: 12, design: .monospaced) : .body)
             .focused($focused)
@@ -104,7 +105,8 @@ struct SecretField: View {
                 Button("Remove") { app.setSecret("", for: account) }
                     .buttonStyle(DroppyQuietButtonStyle(size: .small, destructive: true))
             } else {
-                SecureField(placeholder, text: $draft)
+                SecureField("", text: $draft, prompt: Text(placeholder))
+                    .labelsHidden()
                     .textFieldStyle(.roundedBorder)
                     .onSubmit(save)
                 Button("Save", action: save)
@@ -376,7 +378,7 @@ struct WindowAndFilesSection: View {
                     DropletControlRow(title: "Closed for at least") {
                         HStack(spacing: DroppySpacing.sm) {
                             CommitTextField(
-                                placeholder: "5",
+                                placeholder: "",
                                 value: Binding(
                                     get: { String(app.settings.general.autoNewChatAfter) },
                                     set: { text in
@@ -600,24 +602,26 @@ struct AddMCPServerForm: View {
         switch mode {
         case .command:
             DropletStackedRow(title: "Name") {
-                TextField("filesystem", text: $name).textFieldStyle(.roundedBorder)
+                TextField("", text: $name, prompt: Text("filesystem")).labelsHidden().textFieldStyle(.roundedBorder)
             }
             DropletStackedRow(title: "Command", infoTip: "The command and its arguments, as you would type them in Terminal.") {
-                TextField("npx -y @modelcontextprotocol/server-filesystem ~/Documents", text: $commandLine)
+                TextField("", text: $commandLine, prompt: Text("npx -y @modelcontextprotocol/server-filesystem ~/Documents"))
+                    .labelsHidden()
                     .textFieldStyle(.roundedBorder)
                     .font(.system(size: 12, design: .monospaced))
             }
         case .remote:
             DropletStackedRow(title: "Name") {
-                TextField("my-server", text: $name).textFieldStyle(.roundedBorder)
+                TextField("", text: $name, prompt: Text("my-server")).labelsHidden().textFieldStyle(.roundedBorder)
             }
             DropletStackedRow(title: "URL") {
-                TextField("https://example.com/mcp", text: $url)
+                TextField("", text: $url, prompt: Text("https://example.com/mcp"))
+                    .labelsHidden()
                     .textFieldStyle(.roundedBorder)
                     .font(.system(size: 12, design: .monospaced))
             }
             DropletStackedRow(title: "Bearer token (optional)") {
-                SecureField("Token", text: $token).textFieldStyle(.roundedBorder)
+                SecureField("", text: $token, prompt: Text("Token")).labelsHidden().textFieldStyle(.roundedBorder)
             }
         case .importJSON:
             DropletStackedRow(title: "Configuration", infoTip: "Paste an mcpServers object, the format MCP servers document for desktop apps.") {
