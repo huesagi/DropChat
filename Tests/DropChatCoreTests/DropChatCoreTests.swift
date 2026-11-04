@@ -439,7 +439,9 @@ final class ConversationStoreTests: XCTestCase {
         var summaries = await store.list()
         XCTAssertEqual(summaries.map(\.title), ["Newer", "Renamed chat"])
         let loaded = await store.load(older.id)
-        XCTAssertEqual(loaded?.messages, older.messages)
+        // Dates are stored to the second, so compare what the rename must keep.
+        XCTAssertEqual(loaded?.messages.map(\.id), older.messages.map(\.id))
+        XCTAssertEqual(loaded?.messages.map(\.parts), older.messages.map(\.parts))
 
         let blank = await store.rename(older.id, to: "   ")
         XCTAssertFalse(blank)
