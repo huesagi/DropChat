@@ -141,6 +141,10 @@ public struct GeneralSettings: Codable, Hashable, Sendable {
     public var autoNewChatEnabled: Bool
     public var autoNewChatAfter: Int
     public var autoNewChatUnit: TimeUnit
+    /// Scroll the floating window to the latest message when it opens.
+    public var scrollToBottomOnOpen: Bool
+    /// Holding the shortcut shows the chat only until the keys are released.
+    public var peekOnHold: Bool
 
     public init(
         floatingWindowEnabled: Bool = false,
@@ -151,7 +155,9 @@ public struct GeneralSettings: Codable, Hashable, Sendable {
         maxToolRounds: Int = 25,
         autoNewChatEnabled: Bool = false,
         autoNewChatAfter: Int = 5,
-        autoNewChatUnit: TimeUnit = .minutes
+        autoNewChatUnit: TimeUnit = .minutes,
+        scrollToBottomOnOpen: Bool = true,
+        peekOnHold: Bool = true
     ) {
         self.floatingWindowEnabled = floatingWindowEnabled
         self.finderSelectionEnabled = finderSelectionEnabled
@@ -162,6 +168,8 @@ public struct GeneralSettings: Codable, Hashable, Sendable {
         self.autoNewChatEnabled = autoNewChatEnabled
         self.autoNewChatAfter = autoNewChatAfter
         self.autoNewChatUnit = autoNewChatUnit
+        self.scrollToBottomOnOpen = scrollToBottomOnOpen
+        self.peekOnHold = peekOnHold
     }
 
     /// Fields added in later versions must not reset the ones already saved.
@@ -177,6 +185,8 @@ public struct GeneralSettings: Codable, Hashable, Sendable {
         autoNewChatEnabled = (try? container.decodeIfPresent(Bool.self, forKey: .autoNewChatEnabled)) ?? defaults.autoNewChatEnabled
         autoNewChatAfter = (try? container.decodeIfPresent(Int.self, forKey: .autoNewChatAfter)) ?? defaults.autoNewChatAfter
         autoNewChatUnit = (try? container.decodeIfPresent(TimeUnit.self, forKey: .autoNewChatUnit)) ?? defaults.autoNewChatUnit
+        scrollToBottomOnOpen = (try? container.decodeIfPresent(Bool.self, forKey: .scrollToBottomOnOpen)) ?? defaults.scrollToBottomOnOpen
+        peekOnHold = (try? container.decodeIfPresent(Bool.self, forKey: .peekOnHold)) ?? defaults.peekOnHold
     }
 
     public var autoNewChatInterval: TimeInterval {
@@ -364,6 +374,39 @@ public final class ConversationStore: @unchecked Sendable {
                     return Summary(id: conversation.id, title: conversation.title, updatedAt: conversation.updatedAt)
                 }
                 continuation.resume(returning: summaries)
+            }
+        }
+    }
+
+    /// Renames a saved chat. The file keeps its modification date, so the
+    /// chat keeps its place in the history. Returns `false` when it is not
+    /// saved or the title is blank.
+    @discardableResult
+    public func rename(_ id: UUID, to title: String) async -> Bool {
+        let title = Conversation.cleanTitle(title)
+        guard !title.isEmpty else { return false }
+        let url = fileURL(id)
+        return await withCheckedContinuation { continuation in
+            queue.async {
+                let fileManager = FileManager.default
+                guard let data = try? Data(contentsOf: url),
+                      var conversation = try? ConversationStore.decoder.decode(Conversation.self, from: data) else {
+                    continuation.resume(returning: false)
+                    return
+                }
+                conversation.title = title
+                guard let encoded = try? ConversationStore.encoder.encode(conversation) else {
+                    continuation.resume(returning: false)
+                    return
+                }
+                let modified = (try? fileManager.attributesOfItem(atPath: url.path))?[.modificationDate]
+                do {
+                    try encoded.write(to: url, options: .atomic)
+                    if let modified { try? fileManager.setAttributes([.modificationDate: modified], ofItemAtPath: url.path) }
+                    continuation.resume(returning: true)
+                } catch {
+                    continuation.resume(returning: false)
+                }
             }
         }
     }

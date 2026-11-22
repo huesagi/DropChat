@@ -365,10 +365,22 @@ struct WindowAndFilesSection: View {
                     subtitle: "A chat window that floats above other apps, full-screen ones included. When it is on, the shortcut shows or hides this window instead of opening the chat in the notch.",
                     isOn: app.binding(\.general.floatingWindowEnabled)
                 )
+                if app.settings.general.floatingWindowEnabled {
+                    DropletToggleRow(
+                        title: "Scroll to the latest message",
+                        subtitle: "The floating window opens at the end of the chat.",
+                        isOn: app.binding(\.general.scrollToBottomOnOpen)
+                    )
+                }
                 DropletControlRow(title: "Shortcut", infoTip: "Shows or hides DropChat from any app: the floating window when it is on, the chat in the notch otherwise. Option-Shift-Space unless you change it.") {
                     Button("Open Shortcuts") { _ = app.host.workspace.openShortcuts() }
                         .buttonStyle(DroppyQuietButtonStyle(size: .small))
                 }
+                DropletToggleRow(
+                    title: "Hold to peek",
+                    subtitle: "Holding the shortcut shows the chat until you let go. A quick press still keeps it open. A pinned window stays open.",
+                    isOn: app.binding(\.general.peekOnHold)
+                )
                 DropletToggleRow(
                     title: "Start a new chat after closing",
                     subtitle: "When you reopen DropChat after it has been closed for a while, it starts a fresh chat. Earlier chats stay in your history.",

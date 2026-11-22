@@ -6,6 +6,12 @@
 - ⌘N starts a new chat; Shift-Return inserts a line break.
 - The prompt field takes focus when a chat opens or starts.
 - Optional automatic new chat after DropChat has been closed for a set time.
+- Floating window: a collapsible chat list (⌃⌘S) to open, rename and delete saved chats.
+- Floating window: opens scrolled to the latest message (can be turned off in settings).
+- Floating window: closes when you click elsewhere, unless pinned with the new pin button.
+- Holding the shortcut peeks at the chat and hides it again on release; a quick press still toggles it.
+- Fix: dragging over a reply in the floating window selects its text instead of moving the window. The window moves from its header.
+- Fix: starting or opening another chat while an answer streams no longer writes the stopped answer into the new chat.
 
 ## 0.1.0
 
