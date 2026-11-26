@@ -33,6 +33,8 @@ jobs:
         run: |
           git clone --depth 1 --branch "v$DROPPYKIT_VERSION" https://gitlab.com/droppyformac1/droppykit.git "$RUNNER_TEMP/droppykit"
           echo "$RUNNER_TEMP/droppykit/Scripts" >> "$GITHUB_PATH"
+          # Pinning needs the dependency resolved once first.
+          swift package resolve
           swift package resolve droppykit --version "$DROPPYKIT_VERSION"
 
       - name: Unit tests (DropChatCore) and a full package compile
