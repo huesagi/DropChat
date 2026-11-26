@@ -137,7 +137,10 @@ final class AppModel: ObservableObject {
         let config = ProviderConfig(kind: kind)
         update {
             $0.providers.append(config)
-            if $0.activeProviderID == nil { $0.activeProviderID = config.id }
+            if $0.activeProviderID == nil {
+                $0.activeProviderID = config.id
+                $0.activeModel = config.configuredModels.first
+            }
         }
     }
 
@@ -162,11 +165,43 @@ final class AppModel: ObservableObject {
         }
     }
 
-    /// The models to offer for a provider: pinned, default, live, suggested.
+    /// The models to offer for a provider: configured, then live or suggested.
     func models(for config: ProviderConfig) -> [String] {
         var seen = Set<String>()
-        let all = [config.defaultModel] + config.pinnedModels + (fetchedModels[config.id]?.map(\.id) ?? config.kind.suggestedModels)
+        let all = config.configuredModels + (fetchedModels[config.id]?.map(\.id) ?? config.kind.suggestedModels)
         return all.filter { !$0.isEmpty && seen.insert($0).inserted }
+    }
+
+    /// Known models that are not configured for the chat's menu: the live
+    /// list once fetched, otherwise the suggestions.
+    func extraModels(for config: ProviderConfig) -> [String] {
+        var seen = Set(config.configuredModels)
+        let known = fetchedModels[config.id]?.map(\.id) ?? config.kind.suggestedModels
+        return known.filter { !$0.isEmpty && seen.insert($0).inserted }
+    }
+
+    func addModel(_ model: String, to providerID: String) {
+        let model = model.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !model.isEmpty else { return }
+        update { settings in
+            guard let index = settings.providers.firstIndex(where: { $0.id == providerID }),
+                  !settings.providers[index].configuredModels.contains(model) else { return }
+            settings.providers[index].models.append(model)
+        }
+    }
+
+    func setDefault(providerID: String, model: String) {
+        update {
+            $0.activeProviderID = providerID
+            $0.activeModel = model
+        }
+    }
+
+    func removeModel(_ model: String, from providerID: String) {
+        update { settings in
+            guard let index = settings.providers.firstIndex(where: { $0.id == providerID }) else { return }
+            settings.providers[index].models.removeAll { $0 == model }
+        }
     }
 
     // MARK: - MCP

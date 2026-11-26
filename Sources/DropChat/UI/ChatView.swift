@@ -243,14 +243,14 @@ struct ModelMenu: View {
         Menu {
             ForEach(app.settings.providers.filter(\.isEnabled)) { provider in
                 Section(provider.name) {
-                    ForEach(app.models(for: provider), id: \.self) { model in
-                        Button {
-                            session.choose(provider: provider, model: model)
-                        } label: {
-                            if provider.id == session.activeProvider?.id && model == session.activeModel {
-                                Label(model, systemImage: "checkmark")
-                            } else {
-                                Text(model)
+                    ForEach(provider.configuredModels, id: \.self) { model in
+                        modelButton(provider, model)
+                    }
+                    let extra = app.extraModels(for: provider)
+                    if !extra.isEmpty {
+                        Menu("More models") {
+                            ForEach(extra, id: \.self) { model in
+                                modelButton(provider, model)
                             }
                         }
                     }
@@ -271,6 +271,17 @@ struct ModelMenu: View {
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)
         .fixedSize()
+    }
+    private func modelButton(_ provider: ProviderConfig, _ model: String) -> some View {
+        Button {
+            session.choose(provider: provider, model: model)
+        } label: {
+            if provider.id == session.activeProvider?.id && model == session.activeModel {
+                Label(model, systemImage: "checkmark")
+            } else {
+                Text(model)
+            }
+        }
     }
 }
 

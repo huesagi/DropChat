@@ -413,6 +413,82 @@ final class GeneralSettingsTests: XCTestCase {
     }
 }
 
+final class ModelChoiceTests: XCTestCase {
+    func testConfiguredModelsPutDefaultFirstAndDropBlanksAndDuplicates() {
+        let config = ProviderConfig(kind: .openAI, models: ["a", "b", " ", "a", " c ", "b"])
+        XCTAssertEqual(config.configuredModels, ["a", "b", "c"])
+    }
+
+    func testNewProviderStartsWithItsFirstSuggestedModel() {
+        XCTAssertEqual(ProviderConfig(kind: .anthropic).models, Array(ProviderKind.anthropic.suggestedModels.prefix(1)))
+    }
+
+    /// Settings from before the default became global: each provider's own
+    /// default joins its list, and the active one becomes the global default.
+    func testLegacyPerProviderDefaultMigrates() throws {
+        let old = #"{"activeProviderID":"p","providers":[{"id":"p","kind":"openAI","name":"OpenAI","baseURL":"https://api.openai.com/v1","defaultModel":"gpt-x","pinnedModels":["gpt-y"],"extraHeaders":{},"reasoningEnabled":true,"refusalFallbackEnabled":true,"isEnabled":true}]}"#
+        let settings = try JSONDecoder().decode(DropChatSettings.self, from: Data(old.utf8))
+        XCTAssertEqual(settings.providers[0].models, ["gpt-x", "gpt-y"])
+        XCTAssertEqual(settings.activeModel, "gpt-x")
+        XCTAssertEqual(settings.defaultChoice?.model, "gpt-x")
+        let again = try JSONDecoder().decode(DropChatSettings.self, from: JSONEncoder().encode(settings))
+        XCTAssertEqual(again, settings)
+    }
+
+    func testHandTypedGlobalDefaultJoinsItsProvider() throws {
+        let old = #"{"activeProviderID":"p","activeModel":"custom","providers":[{"id":"p","kind":"openAI","defaultModel":"gpt-x"}]}"#
+        let settings = try JSONDecoder().decode(DropChatSettings.self, from: Data(old.utf8))
+        XCTAssertEqual(settings.providers[0].models, ["custom", "gpt-x"])
+        XCTAssertEqual(settings.defaultChoice?.model, "custom")
+    }
+
+    func testDefaultChoiceFallsBackToFirstModel() {
+        var settings = DropChatSettings(
+            providers: [ProviderConfig(id: "p", kind: .openAI, models: ["a", "b"]), ProviderConfig(id: "q", kind: .openAI, models: ["c"])],
+            activeProviderID: "p",
+            activeModel: "b"
+        )
+        XCTAssertEqual(settings.defaultChoice?.model, "b")
+        settings.providers[0].models = ["a"]
+        XCTAssertEqual(settings.defaultChoice?.model, "a")
+        settings.activeModel = "c"
+        XCTAssertEqual(settings.defaultChoice?.model, "a")
+        settings.providers[0].isEnabled = false
+        XCTAssertEqual(settings.defaultChoice?.provider.id, "q")
+        XCTAssertEqual(settings.defaultChoice?.model, "c")
+    }
+
+    func testNewChatFollowsDefaultUnlessAsked() {
+        let provider = ProviderConfig(id: "p", kind: .openAI)
+        var settings = DropChatSettings(providers: [provider], lastProviderID: "p", lastModel: "m")
+        XCTAssertTrue(settings.newChatModel() == (nil, nil))
+        settings.general.newChatUsesLastModel = true
+        XCTAssertTrue(settings.newChatModel() == ("p", "m"))
+    }
+
+    func testNewChatIgnoresLastPickOfMissingOrDisabledProvider() {
+        var settings = DropChatSettings(
+            providers: [ProviderConfig(id: "p", kind: .openAI, isEnabled: false)],
+            lastProviderID: "p",
+            lastModel: "m",
+            general: GeneralSettings(newChatUsesLastModel: true)
+        )
+        XCTAssertTrue(settings.newChatModel() == (nil, nil))
+        settings.lastProviderID = "gone"
+        settings.providers[0].isEnabled = true
+        XCTAssertTrue(settings.newChatModel() == (nil, nil))
+    }
+
+    func testOldBlobHasNoLastPickAndNewKeysRoundTrip() throws {
+        let old = try JSONDecoder().decode(DropChatSettings.self, from: Data(#"{"activeModel":"x"}"#.utf8))
+        XCTAssertNil(old.lastModel)
+        XCTAssertFalse(old.general.newChatUsesLastModel)
+        let settings = DropChatSettings(lastProviderID: "p", lastModel: "m", general: GeneralSettings(newChatUsesLastModel: true))
+        let decoded = try JSONDecoder().decode(DropChatSettings.self, from: JSONEncoder().encode(settings))
+        XCTAssertEqual(decoded, settings)
+    }
+}
+
 final class ConversationStoreTests: XCTestCase {
     private var directory: URL!
 

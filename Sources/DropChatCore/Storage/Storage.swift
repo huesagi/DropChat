@@ -147,6 +147,9 @@ public struct GeneralSettings: Codable, Hashable, Sendable {
     public var peekOnHold: Bool
     /// Double-clicking the floating window's header or top edge pins it.
     public var doubleClickToPin: Bool
+    /// New chats start with the model last picked in the chat's model menu
+    /// instead of the default model.
+    public var newChatUsesLastModel: Bool
 
     public init(
         floatingWindowEnabled: Bool = false,
@@ -160,7 +163,8 @@ public struct GeneralSettings: Codable, Hashable, Sendable {
         autoNewChatUnit: TimeUnit = .minutes,
         scrollToBottomOnOpen: Bool = true,
         peekOnHold: Bool = true,
-        doubleClickToPin: Bool = true
+        doubleClickToPin: Bool = true,
+        newChatUsesLastModel: Bool = false
     ) {
         self.floatingWindowEnabled = floatingWindowEnabled
         self.finderSelectionEnabled = finderSelectionEnabled
@@ -174,6 +178,7 @@ public struct GeneralSettings: Codable, Hashable, Sendable {
         self.scrollToBottomOnOpen = scrollToBottomOnOpen
         self.peekOnHold = peekOnHold
         self.doubleClickToPin = doubleClickToPin
+        self.newChatUsesLastModel = newChatUsesLastModel
     }
 
     /// Fields added in later versions must not reset the ones already saved.
@@ -192,6 +197,7 @@ public struct GeneralSettings: Codable, Hashable, Sendable {
         scrollToBottomOnOpen = (try? container.decodeIfPresent(Bool.self, forKey: .scrollToBottomOnOpen)) ?? defaults.scrollToBottomOnOpen
         peekOnHold = (try? container.decodeIfPresent(Bool.self, forKey: .peekOnHold)) ?? defaults.peekOnHold
         doubleClickToPin = (try? container.decodeIfPresent(Bool.self, forKey: .doubleClickToPin)) ?? defaults.doubleClickToPin
+        newChatUsesLastModel = (try? container.decodeIfPresent(Bool.self, forKey: .newChatUsesLastModel)) ?? defaults.newChatUsesLastModel
     }
 
     public var autoNewChatInterval: TimeInterval {
@@ -203,7 +209,12 @@ public struct GeneralSettings: Codable, Hashable, Sendable {
 public struct DropChatSettings: Codable, Hashable, Sendable {
     public var providers: [ProviderConfig]
     public var activeProviderID: String?
+    /// The default model for new chats, with `activeProviderID` (the Chat
+    /// section in settings). Read it through `defaultChoice`.
     public var activeModel: String?
+    /// The model last picked in the chat's model menu.
+    public var lastProviderID: String?
+    public var lastModel: String?
     public var mcpServers: [MCPServerConfig]
     public var web: WebSettings
     public var skills: SkillSettings
@@ -213,6 +224,8 @@ public struct DropChatSettings: Codable, Hashable, Sendable {
         providers: [ProviderConfig] = [],
         activeProviderID: String? = nil,
         activeModel: String? = nil,
+        lastProviderID: String? = nil,
+        lastModel: String? = nil,
         mcpServers: [MCPServerConfig] = [],
         web: WebSettings = WebSettings(),
         skills: SkillSettings = SkillSettings(),
@@ -221,6 +234,8 @@ public struct DropChatSettings: Codable, Hashable, Sendable {
         self.providers = providers
         self.activeProviderID = activeProviderID
         self.activeModel = activeModel
+        self.lastProviderID = lastProviderID
+        self.lastModel = lastModel
         self.mcpServers = mcpServers
         self.web = web
         self.skills = skills
@@ -234,14 +249,49 @@ public struct DropChatSettings: Codable, Hashable, Sendable {
         providers = (try? container.decode([ProviderConfig].self, forKey: .providers)) ?? []
         activeProviderID = try? container.decode(String.self, forKey: .activeProviderID)
         activeModel = try? container.decode(String.self, forKey: .activeModel)
+        lastProviderID = try? container.decode(String.self, forKey: .lastProviderID)
+        lastModel = try? container.decode(String.self, forKey: .lastModel)
         mcpServers = (try? container.decode([MCPServerConfig].self, forKey: .mcpServers)) ?? []
         web = (try? container.decode(WebSettings.self, forKey: .web)) ?? WebSettings()
         skills = (try? container.decode(SkillSettings.self, forKey: .skills)) ?? SkillSettings()
         general = (try? container.decode(GeneralSettings.self, forKey: .general)) ?? GeneralSettings()
+        // Before the default became global, the active provider's own default
+        // model was used; it is now the first of that provider's models.
+        if activeModel?.isEmpty ?? true { activeModel = activeProvider?.configuredModels.first }
+        // A default typed in by hand joins its provider's list, so it stays
+        // the default.
+        if let activeModel, !activeModel.isEmpty,
+           let index = providers.firstIndex(where: { $0.id == activeProviderID }),
+           !providers[index].configuredModels.contains(activeModel) {
+            providers[index].models.insert(activeModel, at: 0)
+        }
     }
 
     public var activeProvider: ProviderConfig? {
         providers.first { $0.id == activeProviderID && $0.isEnabled } ?? providers.first { $0.isEnabled }
+    }
+
+    /// The default provider and model. The model falls back to the
+    /// provider's first one when it is unset, belongs to another provider or
+    /// was removed from the list.
+    public var defaultChoice: (provider: ProviderConfig, model: String?)? {
+        guard let provider = activeProvider else { return nil }
+        let models = provider.configuredModels
+        if provider.id == activeProviderID, let activeModel, models.contains(activeModel) {
+            return (provider, activeModel)
+        }
+        return (provider, models.first)
+    }
+
+    /// The per-chat model choice a new chat starts with. `nil` follows the
+    /// default; the last pick is used only when the user asked for it and its
+    /// provider is still there and enabled.
+    public func newChatModel() -> (providerID: String?, model: String?) {
+        guard general.newChatUsesLastModel,
+              let lastProviderID, let lastModel, !lastModel.isEmpty,
+              providers.contains(where: { $0.id == lastProviderID && $0.isEnabled })
+        else { return (nil, nil) }
+        return (lastProviderID, lastModel)
     }
 }
 

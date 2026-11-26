@@ -166,26 +166,21 @@ struct ChatSettingsSection: View {
         } content: {
             DropletSettingsCard {
                 if app.settings.providers.isEmpty {
-                    DropletControlRow(title: "Model", infoTip: "Add a provider below first.") {
+                    DropletControlRow(title: "Default model", infoTip: "Add a provider below first.") {
                         DropletValuePill(text: "No provider")
                     }
                 } else {
-                    DropletGroupedPickerRow(title: "Provider") {
-                        Picker("Provider", selection: app.binding(\.activeProviderID)) {
-                            ForEach(app.settings.providers) { provider in
-                                Text(provider.name).tag(Optional(provider.id))
-                            }
-                        }
-                        .labelsHidden()
+                    DropletControlRow(title: "Default model", infoTip: "New chats start with this model. Add models to a provider below.") {
+                        DefaultModelMenu(app: app)
                     }
-                    if let provider = app.settings.activeProvider {
-                        DropletControlRow(title: "Model") {
-                            ModelField(app: app, provider: provider, value: Binding(
-                                get: { app.settings.activeModel ?? provider.defaultModel },
-                                set: { value in app.update { $0.activeModel = value } }
-                            ))
-                        }
-                    }
+                    DropletToggleRow(
+                        title: "Use last model for new chats",
+                        subtitle: "New chats start with the model you last picked instead of the default.",
+                        isOn: Binding(
+                            get: { app.settings.general.newChatUsesLastModel },
+                            set: { value in app.update { $0.general.newChatUsesLastModel = value } }
+                        )
+                    )
                 }
                 DropletStackedRow(title: "Instructions", infoTip: "Added to every chat as the system prompt. Leave empty for DropChat's default.") {
                     TextEditor(text: Binding(
@@ -210,37 +205,112 @@ struct ChatSettingsSection: View {
     }
 }
 
-/// A model name: a menu of known models plus free text.
-struct ModelField: View {
+/// The one default model for new chats, from every enabled provider's
+/// models.
+struct DefaultModelMenu: View {
+    @ObservedObject var app: AppModel
+
+    var body: some View {
+        let current = app.settings.defaultChoice
+        Menu {
+            ForEach(app.settings.providers.filter(\.isEnabled)) { provider in
+                Section(provider.name) {
+                    ForEach(provider.configuredModels, id: \.self) { model in
+                        Button {
+                            app.setDefault(providerID: provider.id, model: model)
+                        } label: {
+                            if provider.id == current?.provider.id && model == current?.model {
+                                Label(model, systemImage: "checkmark")
+                            } else {
+                                Text(model)
+                            }
+                        }
+                    }
+                }
+            }
+        } label: {
+            if let current, let model = current.model {
+                Text("\(model) · \(current.provider.name)")
+            } else {
+                Text("Choose a model")
+            }
+        }
+        .fixedSize()
+    }
+}
+
+/// The known models of a provider (configured, live or suggested), plus a
+/// command to fetch the live list.
+struct KnownModelsMenu: View {
     @ObservedObject var app: AppModel
     let provider: ProviderConfig
-    @Binding var value: String
-    @State private var message: String?
+    @Binding var message: String?
+    let onPick: (String) -> Void
     @State private var isFetching = false
 
     var body: some View {
-        VStack(alignment: .trailing, spacing: DroppySpacing.xs) {
-            HStack(spacing: DroppySpacing.xs) {
-                CommitTextField(placeholder: "Model id", value: $value, monospaced: true)
-                    .frame(minWidth: 180, maxWidth: 260)
-                Menu {
-                    ForEach(app.models(for: provider), id: \.self) { model in
-                        Button(model) { value = model }
-                    }
-                    Divider()
-                    Button(isFetching ? "Fetching…" : "Fetch models from \(provider.name)") {
-                        Task {
-                            isFetching = true
-                            message = await app.fetchModels(for: provider)
-                            isFetching = false
-                        }
-                    }
-                    .disabled(isFetching)
-                } label: {
-                    Image(systemName: "list.bullet")
+        Menu {
+            ForEach(app.models(for: provider), id: \.self) { model in
+                Button(model) { onPick(model) }
+            }
+            Divider()
+            Button(isFetching ? "Fetching…" : "Fetch models from \(provider.name)") {
+                Task {
+                    isFetching = true
+                    message = await app.fetchModels(for: provider)
+                    isFetching = false
                 }
-                .menuStyle(.borderlessButton)
-                .fixedSize()
+            }
+            .disabled(isFetching)
+        } label: {
+            Image(systemName: "list.bullet")
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+    }
+}
+
+/// The extra models a provider offers in the chat's model menu.
+struct ModelListEditor: View {
+    @ObservedObject var app: AppModel
+    let provider: ProviderConfig
+    @State private var draft = ""
+    @State private var message: String?
+
+    private var models: [String] {
+        app.settings.providers.first { $0.id == provider.id }?.models ?? []
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: DroppySpacing.xs) {
+            ForEach(models, id: \.self) { model in
+                HStack(spacing: DroppySpacing.xs) {
+                    Text(model)
+                        .font(.system(size: 12, design: .monospaced))
+                        .lineLimit(1)
+                        .textSelection(.enabled)
+                    Spacer(minLength: DroppySpacing.xs)
+                    Button {
+                        app.removeModel(model, from: provider.id)
+                    } label: {
+                        Image(systemName: "minus.circle")
+                    }
+                    .buttonStyle(.borderless)
+                    .help("Remove \(model)")
+                }
+            }
+            HStack(spacing: DroppySpacing.xs) {
+                TextField("", text: $draft, prompt: Text("Model id"))
+                    .labelsHidden()
+                    .textFieldStyle(.roundedBorder)
+                    .font(.system(size: 12, design: .monospaced))
+                    .onSubmit(add)
+                KnownModelsMenu(app: app, provider: provider, message: $message) { model in
+                    app.addModel(model, to: provider.id)
+                }
+                Button("Add", action: add)
+                    .buttonStyle(DroppyQuietButtonStyle(size: .small))
+                    .disabled(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
             if let message {
                 Text(message)
@@ -248,6 +318,11 @@ struct ModelField: View {
                     .foregroundStyle(.secondary)
             }
         }
+    }
+
+    private func add() {
+        app.addModel(draft, to: provider.id)
+        draft = ""
     }
 }
 
@@ -292,8 +367,8 @@ struct ProviderSection: View {
                 DropletStackedRow(title: "Base URL", infoTip: provider.kind == .openAICompatible ? "Any server that speaks the OpenAI Chat Completions API, such as Ollama, LM Studio or vLLM." : "Change only for a proxy or a regional endpoint.") {
                     CommitTextField(placeholder: provider.kind.defaultBaseURL, value: app.providerBinding(provider.id, \.baseURL, fallback: ""), monospaced: true)
                 }
-                DropletControlRow(title: "Default model") {
-                    ModelField(app: app, provider: provider, value: app.providerBinding(provider.id, \.defaultModel, fallback: ""))
+                DropletStackedRow(title: "Models", infoTip: "Shown in the chat's model menu. The default model for new chats is set under Chat.") {
+                    ModelListEditor(app: app, provider: provider)
                 }
                 DropletToggleRow(title: "Reasoning", subtitle: "Ask the model to think before it answers, where the API supports it, and show a summary.", isOn: app.providerBinding(provider.id, \.reasoningEnabled, fallback: true))
                 if provider.kind == .anthropic {

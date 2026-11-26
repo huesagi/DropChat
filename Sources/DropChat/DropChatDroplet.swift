@@ -288,7 +288,7 @@ extension DropChatDroplet: SettingsPaneProviding {
 
     public var settingsSearchEntries: [SettingsSearchEntry] {
         [
-            SettingsSearchEntry(title: "Providers", keywords: ["api key", "openai", "anthropic", "google", "openrouter", "model"]),
+            SettingsSearchEntry(title: "Providers", keywords: ["api key", "openai", "anthropic", "google", "openrouter", "model", "models", "last model"]),
             SettingsSearchEntry(title: "MCP servers", keywords: ["mcp", "tools"]),
             SettingsSearchEntry(title: "Web search", keywords: ["exa", "perplexity", "search", "crawl"]),
             SettingsSearchEntry(title: "Skills", keywords: ["agent skills", "skill.md"]),

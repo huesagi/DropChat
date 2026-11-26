@@ -24,10 +24,19 @@ jobs:
           xcodebuild -version
           swift --version
 
+      # Held at 1.27.0: DroppyKit 1.28 and 1.30 use PickerStyle.tabs, which this
+      # Xcode (26.3) does not have.
+      # The pin lives here, not in Package.swift, which the Store wants as a
+      # plain floor. Lift it once a fixed release is out.
       - name: Get the DroppyKit SDK
+        env:
+          DROPPYKIT_VERSION: 1.27.0
         run: |
-          git clone --depth 1 https://gitlab.com/droppyformac1/droppykit.git "$RUNNER_TEMP/droppykit"
+          git clone --depth 1 --branch "v$DROPPYKIT_VERSION" https://gitlab.com/droppyformac1/droppykit.git "$RUNNER_TEMP/droppykit"
           echo "$RUNNER_TEMP/droppykit/Scripts" >> "$GITHUB_PATH"
+          # Pinning needs the dependency resolved once first.
+          swift package resolve
+          swift package resolve droppykit --version "$DROPPYKIT_VERSION"
 
       - name: Unit tests (DropChatCore) and a full package compile
         run: swift test
