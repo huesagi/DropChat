@@ -371,6 +371,11 @@ struct WindowAndFilesSection: View {
                         subtitle: "The floating window opens at the end of the chat.",
                         isOn: app.binding(\.general.scrollToBottomOnOpen)
                     )
+                    DropletToggleRow(
+                        title: "Double-click to pin",
+                        subtitle: "Double-clicking the top of the window pins or unpins it. A pinned window stays open when you click elsewhere.",
+                        isOn: app.binding(\.general.doubleClickToPin)
+                    )
                 }
                 DropletControlRow(title: "Shortcut", infoTip: "Shows or hides DropChat from any app: the floating window when it is on, the chat in the notch otherwise. Option-Shift-Space unless you change it.") {
                     Button("Open Shortcuts") { _ = app.host.workspace.openShortcuts() }

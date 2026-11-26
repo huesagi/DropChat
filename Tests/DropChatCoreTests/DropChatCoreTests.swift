@@ -397,6 +397,7 @@ final class GeneralSettingsTests: XCTestCase {
         XCTAssertEqual(settings.general.autoNewChatUnit, .minutes)
         XCTAssertTrue(settings.general.scrollToBottomOnOpen)
         XCTAssertTrue(settings.general.peekOnHold)
+        XCTAssertTrue(settings.general.doubleClickToPin)
     }
 
     func testAutoNewChatInterval() {

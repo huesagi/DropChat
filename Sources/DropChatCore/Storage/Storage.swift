@@ -145,6 +145,8 @@ public struct GeneralSettings: Codable, Hashable, Sendable {
     public var scrollToBottomOnOpen: Bool
     /// Holding the shortcut shows the chat only until the keys are released.
     public var peekOnHold: Bool
+    /// Double-clicking the floating window's header or top edge pins it.
+    public var doubleClickToPin: Bool
 
     public init(
         floatingWindowEnabled: Bool = false,
@@ -157,7 +159,8 @@ public struct GeneralSettings: Codable, Hashable, Sendable {
         autoNewChatAfter: Int = 5,
         autoNewChatUnit: TimeUnit = .minutes,
         scrollToBottomOnOpen: Bool = true,
-        peekOnHold: Bool = true
+        peekOnHold: Bool = true,
+        doubleClickToPin: Bool = true
     ) {
         self.floatingWindowEnabled = floatingWindowEnabled
         self.finderSelectionEnabled = finderSelectionEnabled
@@ -170,6 +173,7 @@ public struct GeneralSettings: Codable, Hashable, Sendable {
         self.autoNewChatUnit = autoNewChatUnit
         self.scrollToBottomOnOpen = scrollToBottomOnOpen
         self.peekOnHold = peekOnHold
+        self.doubleClickToPin = doubleClickToPin
     }
 
     /// Fields added in later versions must not reset the ones already saved.
@@ -187,6 +191,7 @@ public struct GeneralSettings: Codable, Hashable, Sendable {
         autoNewChatUnit = (try? container.decodeIfPresent(TimeUnit.self, forKey: .autoNewChatUnit)) ?? defaults.autoNewChatUnit
         scrollToBottomOnOpen = (try? container.decodeIfPresent(Bool.self, forKey: .scrollToBottomOnOpen)) ?? defaults.scrollToBottomOnOpen
         peekOnHold = (try? container.decodeIfPresent(Bool.self, forKey: .peekOnHold)) ?? defaults.peekOnHold
+        doubleClickToPin = (try? container.decodeIfPresent(Bool.self, forKey: .doubleClickToPin)) ?? defaults.doubleClickToPin
     }
 
     public var autoNewChatInterval: TimeInterval {

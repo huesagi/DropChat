@@ -12,6 +12,11 @@ final class ChatPanel: NSPanel {
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
 
+    /// Never fills the screen: a double-click on the top edge pins the
+    /// window instead (or does nothing), whatever the system's title bar
+    /// setting says.
+    override func zoom(_ sender: Any?) {}
+
     override func cancelOperation(_ sender: Any?) {
         orderOut(nil)
     }
@@ -224,7 +229,7 @@ private struct FloatingChatRoot: View {
     var body: some View {
         HStack(spacing: 0) {
             if state.isSidebarVisible {
-                ChatSidebar(app: app, session: session)
+                ChatSidebar(app: app, session: session, windowState: state)
                     .padding(.leading, DroppySpacing.md)
                     .padding(.trailing, DroppySpacing.sm)
                     .padding(.top, DroppySpacing.lg)
@@ -238,9 +243,10 @@ private struct FloatingChatRoot: View {
                 .padding(.bottom, DroppySpacing.md)
         }
         .environment(\.chatTheme, .panel)
-        // The strip above the header moves the window too.
+        // The strip above the header moves the window too; a double-click pins.
         .overlay(alignment: .top) {
-            WindowDragArea().frame(height: DroppySpacing.lg)
+            WindowDragArea(onDoubleClick: state.pinToggle(enabled: app.settings.general.doubleClickToPin))
+                .frame(height: DroppySpacing.lg)
         }
         .background(DroppyPanelSurface(cornerRadius: FloatingPanelController.cornerRadius))
         .clipShape(RoundedRectangle(cornerRadius: FloatingPanelController.cornerRadius, style: .continuous))

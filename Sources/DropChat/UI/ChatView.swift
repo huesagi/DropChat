@@ -184,9 +184,12 @@ struct ChatHeader: View {
                 .help("Close")
             }
         }
-        // In the floating window, the header's empty space moves the window.
+        // In the floating window, the header's empty space moves the window and
+        // a double-click on it pins or unpins.
         .background {
-            if windowState != nil { WindowDragArea() }
+            if let windowState {
+                WindowDragArea(onDoubleClick: windowState.pinToggle(enabled: app.settings.general.doubleClickToPin))
+            }
         }
     }
 }

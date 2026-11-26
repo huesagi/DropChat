@@ -292,7 +292,7 @@ extension DropChatDroplet: SettingsPaneProviding {
             SettingsSearchEntry(title: "MCP servers", keywords: ["mcp", "tools"]),
             SettingsSearchEntry(title: "Web search", keywords: ["exa", "perplexity", "search", "crawl"]),
             SettingsSearchEntry(title: "Skills", keywords: ["agent skills", "skill.md"]),
-            SettingsSearchEntry(title: "Floating window", keywords: ["window", "full screen", "overlay", "pin", "sidebar", "scroll"]),
+            SettingsSearchEntry(title: "Floating window", keywords: ["window", "full screen", "overlay", "pin", "double-click", "sidebar", "scroll"]),
             SettingsSearchEntry(title: "Hold to peek", keywords: ["shortcut", "hold", "peek"]),
         ]
     }

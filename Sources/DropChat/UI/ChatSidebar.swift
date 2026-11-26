@@ -6,6 +6,7 @@ import SwiftUI
 struct ChatSidebar: View {
     @ObservedObject var app: AppModel
     @ObservedObject var session: ChatSession
+    var windowState: FloatingWindowState?
     @Environment(\.chatTheme) private var theme
 
     @State private var hoveredID: UUID?
@@ -20,7 +21,7 @@ struct ChatSidebar: View {
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(theme.secondary)
                 .frame(maxWidth: .infinity, minHeight: 24, alignment: .leading)
-                .background(WindowDragArea())
+                .background(WindowDragArea(onDoubleClick: windowState?.pinToggle(enabled: app.settings.general.doubleClickToPin)))
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 2) {
                     if app.recentConversations.isEmpty {
