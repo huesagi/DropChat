@@ -79,9 +79,9 @@ public struct ProviderConfig: Codable, Hashable, Sendable, Identifiable {
     public var kind: ProviderKind
     public var name: String
     public var baseURL: String
-    public var defaultModel: String
-    /// Models the user pinned to the picker (in addition to the live list).
-    public var pinnedModels: [String]
+    /// The models offered in the chat's model menu. The default model for new
+    /// chats is one global setting (`DropChatSettings.activeModel`).
+    public var models: [String]
     public var extraHeaders: [String: String]
     public var maxOutputTokens: Int?
     public var temperature: Double?
@@ -91,13 +91,24 @@ public struct ProviderConfig: Codable, Hashable, Sendable, Identifiable {
     public var refusalFallbackEnabled: Bool
     public var isEnabled: Bool
 
+    /// `models` keeps the key of the older `pinnedModels` field.
+    enum CodingKeys: String, CodingKey {
+        case id, kind, name, baseURL, extraHeaders, maxOutputTokens, temperature, reasoningEnabled, refusalFallbackEnabled, isEnabled
+        case models = "pinnedModels"
+    }
+
+    /// Read only, from settings saved before the default became global.
+    private enum LegacyKeys: String, CodingKey {
+        case defaultModel
+    }
+
+    /// `models` defaults to the kind's first suggested model.
     public init(
         id: String = UUID().uuidString,
         kind: ProviderKind,
         name: String? = nil,
         baseURL: String? = nil,
-        defaultModel: String? = nil,
-        pinnedModels: [String] = [],
+        models: [String]? = nil,
         extraHeaders: [String: String] = [:],
         maxOutputTokens: Int? = nil,
         temperature: Double? = nil,
@@ -109,8 +120,7 @@ public struct ProviderConfig: Codable, Hashable, Sendable, Identifiable {
         self.kind = kind
         self.name = name ?? kind.displayName
         self.baseURL = baseURL ?? kind.defaultBaseURL
-        self.defaultModel = defaultModel ?? kind.suggestedModels.first ?? ""
-        self.pinnedModels = pinnedModels
+        self.models = models ?? Array(kind.suggestedModels.prefix(1))
         self.extraHeaders = extraHeaders
         self.maxOutputTokens = maxOutputTokens
         self.temperature = temperature
@@ -119,7 +129,40 @@ public struct ProviderConfig: Codable, Hashable, Sendable, Identifiable {
         self.isEnabled = isEnabled
     }
 
+    /// Tolerant: fields added later take their defaults. A per-provider
+    /// `defaultModel` from older settings becomes the first of `models`.
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let kind = try container.decode(ProviderKind.self, forKey: .kind)
+        let defaults = ProviderConfig(id: "", kind: kind, models: [])
+        id = try container.decode(String.self, forKey: .id)
+        self.kind = kind
+        name = (try? container.decodeIfPresent(String.self, forKey: .name)) ?? defaults.name
+        baseURL = (try? container.decodeIfPresent(String.self, forKey: .baseURL)) ?? defaults.baseURL
+        var models = (try? container.decodeIfPresent([String].self, forKey: .models)) ?? []
+        let legacy = try decoder.container(keyedBy: LegacyKeys.self)
+        if let old = (try? legacy.decodeIfPresent(String.self, forKey: .defaultModel))?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !old.isEmpty, !models.contains(old) {
+            models.insert(old, at: 0)
+        }
+        self.models = models
+        extraHeaders = (try? container.decodeIfPresent([String: String].self, forKey: .extraHeaders)) ?? defaults.extraHeaders
+        maxOutputTokens = try? container.decodeIfPresent(Int.self, forKey: .maxOutputTokens)
+        temperature = try? container.decodeIfPresent(Double.self, forKey: .temperature)
+        reasoningEnabled = (try? container.decodeIfPresent(Bool.self, forKey: .reasoningEnabled)) ?? defaults.reasoningEnabled
+        refusalFallbackEnabled = (try? container.decodeIfPresent(Bool.self, forKey: .refusalFallbackEnabled)) ?? defaults.refusalFallbackEnabled
+        isEnabled = (try? container.decodeIfPresent(Bool.self, forKey: .isEnabled)) ?? defaults.isEnabled
+    }
+
     public var secretAccount: String { "provider.\(id)" }
+
+    /// `models` trimmed, without blanks or duplicates.
+    public var configuredModels: [String] {
+        var seen = Set<String>()
+        return models
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty && seen.insert($0).inserted }
+    }
 
     /// `baseURL` with any trailing slash removed.
     public var normalizedBaseURL: String {

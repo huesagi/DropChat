@@ -100,16 +100,17 @@ final class ChatSession: ObservableObject {
 
     var activeModel: String {
         if let model, !model.isEmpty { return model }
-        if providerID == nil, let model = app?.settings.activeModel, !model.isEmpty { return model }
-        return activeProvider?.defaultModel ?? ""
+        if providerID == nil { return app?.settings.defaultChoice?.model ?? "" }
+        return activeProvider?.configuredModels.first ?? ""
     }
 
     func choose(provider: ProviderConfig, model: String) {
         providerID = provider.id
         self.model = model
+        // Remembered as the last pick; the default in settings stays put.
         app?.update {
-            $0.activeProviderID = provider.id
-            $0.activeModel = model
+            $0.lastProviderID = provider.id
+            $0.lastModel = model
         }
     }
 
@@ -354,6 +355,7 @@ final class ChatSession: ObservableObject {
         errorMessage = nil
         usage = TokenUsage()
         approvalMemory.reset()
+        (providerID, model) = app?.settings.newChatModel() ?? (nil, nil)
         requestFocus()
         if let general = app?.settings.general, general.autoAttachFinderSelection, general.finderSelectionEnabled {
             attachFinderSelection()

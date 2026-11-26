@@ -130,7 +130,7 @@ public final class ChatEngine: @unchecked Sendable {
     ) async throws -> AgentLoop {
         let config = settings.providers.first { $0.id == providerID && $0.isEnabled } ?? settings.activeProvider
         guard let config, let provider = provider(for: config) else { throw ChatEngineError.noProvider }
-        let modelName = (model?.isEmpty == false ? model : nil) ?? (config.defaultModel.isEmpty ? nil : config.defaultModel)
+        let modelName = (model?.isEmpty == false ? model : nil) ?? config.configuredModels.first
         guard let modelName else { throw ChatEngineError.noModel }
 
         let tools = await registry.availableTools()
